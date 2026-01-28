@@ -16,7 +16,7 @@ const AUTOSAVE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 type ToneType = typeof import('tone');
 
 export default function RetroTypePage() {
-  const [isLoading, setIsLoading] = useState(true);
+  const [isClient, setIsClient] = useState(false);
   const [activeDocument, setActiveDocument] = useState<Document | null>(null);
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
   const [content, setContent] = useState(''); // content of the active chapter
@@ -34,6 +34,19 @@ export default function RetroTypePage() {
   const synthRef = useRef<import('tone').MembraneSynth | null>(null);
 
   useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  const loadDocuments = useCallback(() => {
+    if (!isClient) return;
+    const docs = docManager.getDocuments();
+    setDocuments(docs);
+    return docs;
+  }, [isClient]);
+
+  useEffect(() => {
+    if (!isClient) return;
+
     import('tone').then(ToneModule => {
       ToneRef.current = ToneModule;
       synthRef.current = new ToneModule.MembraneSynth({
@@ -43,31 +56,10 @@ export default function RetroTypePage() {
         envelope: { attack: 0.001, decay: 0.2, sustain: 0.01, release: 0.05, attackCurve: 'exponential' }
       }).toDestination();
     });
-  }, []);
 
-  const loadDocuments = useCallback(() => {
-    const docs = docManager.getDocuments();
-    setDocuments(docs);
-    return docs;
-  }, []);
+    const initialDocs = docManager.getDocuments();
+    setDocuments(initialDocs);
 
-  const updateActiveChapterContent = (newContent: string) => {
-    setContent(newContent);
-    if (!activeDocument || !activeChapterId) return;
-
-    setActiveDocument(prevDoc => {
-      if (!prevDoc) return null;
-      return {
-        ...prevDoc,
-        chapters: prevDoc.chapters.map(chap => 
-          chap.id === activeChapterId ? { ...chap, content: newContent } : chap
-        ),
-      };
-    });
-  };
-
-  useEffect(() => {
-    const initialDocs = loadDocuments();
     let docToLoad: Document | null = null;
     if (initialDocs.length > 0) {
       const mostRecentDocId = initialDocs[0].id;
@@ -85,10 +77,9 @@ export default function RetroTypePage() {
       const firstChapterId = newDoc.chapters[0]?.id || null;
       setActiveChapterId(firstChapterId);
       setContent(newDoc.chapters[0]?.content || '');
-      loadDocuments();
+      setDocuments(docManager.getDocuments());
     }
-    setIsLoading(false);
-  }, [loadDocuments]);
+  }, [isClient]);
 
   const handleSave = useCallback(() => {
     if (activeDocument) {
@@ -98,7 +89,7 @@ export default function RetroTypePage() {
   }, [activeDocument, loadDocuments]);
 
   useEffect(() => {
-    if (isLoading) return;
+    if (!isClient) return;
     const autoSave = () => {
       if (activeDocument) {
         setIsSaving(true);
@@ -109,10 +100,10 @@ export default function RetroTypePage() {
     };
     const intervalId = setInterval(autoSave, AUTOSAVE_INTERVAL);
     return () => clearInterval(intervalId);
-  }, [activeDocument, handleSave, toast, isLoading]);
+  }, [isClient, activeDocument, handleSave, toast]);
 
   useEffect(() => {
-    if (isLoading) return;
+    if (!isClient) return;
     const handleBeforeUnload = () => {
       if (activeDocument) {
         handleSave();
@@ -120,7 +111,7 @@ export default function RetroTypePage() {
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [activeDocument, handleSave, isLoading]);
+  }, [isClient, activeDocument, handleSave]);
 
   const switchDocument = (doc: Document) => {
     handleSave();
@@ -130,6 +121,21 @@ export default function RetroTypePage() {
     setContent(doc.chapters[0]?.content || '');
     loadDocuments();
   }
+  
+  const updateActiveChapterContent = (newContent: string) => {
+    setContent(newContent);
+    if (!activeDocument || !activeChapterId) return;
+
+    setActiveDocument(prevDoc => {
+      if (!prevDoc) return null;
+      return {
+        ...prevDoc,
+        chapters: prevDoc.chapters.map(chap => 
+          chap.id === activeChapterId ? { ...chap, content: newContent } : chap
+        ),
+      };
+    });
+  };
 
   const handleNewDocument = () => {
     const newDoc = docManager.createNewDocument();
@@ -151,7 +157,7 @@ export default function RetroTypePage() {
     toast({ title: "Document Deleted", variant: "destructive" });
     
     if (activeDocument?.id === id) {
-      if (updatedDocs.length > 0) {
+      if (updatedDocs && updatedDocs.length > 0) {
         const docToOpen = docManager.getDocument(updatedDocs[0].id);
         if (docToOpen) {
           setActiveDocument(docToOpen);
@@ -229,11 +235,11 @@ export default function RetroTypePage() {
     setActiveDocument({ ...activeDocument, chapters: updatedChapters });
   }
 
-  const activeDocMeta = documents.find(d => d.id === activeDocument?.id);
-
-  if (isLoading) {
+  if (!isClient) {
     return null;
   }
+
+  const activeDocMeta = documents.find(d => d.id === activeDocument?.id);
 
   return (
     <div className="flex flex-col h-svh bg-background text-foreground font-body">
