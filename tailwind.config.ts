@@ -10,8 +10,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        body: ['Literata', 'serif'],
-        headline: ['Literata', 'serif'],
+        body: ['Special Elite', 'monospace'],
+        headline: ['Special Elite', 'monospace'],
         code: ['monospace'],
       },
       colors: {

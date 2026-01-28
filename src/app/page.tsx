@@ -1,24 +1,29 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { cn } from "@/lib/utils";
 import { Textarea } from '@/components/ui/textarea';
 import { AppHeader } from '@/components/app-header';
 import { AppFooter } from '@/components/app-footer';
 import { OpenDocumentDialog } from '@/components/open-document-dialog';
+import { ChapterSidebar } from '@/components/chapter-sidebar';
 import * as docManager from '@/lib/document-manager';
-import type { Document } from '@/lib/document-manager';
+import type { Document, DocumentMeta, Chapter } from '@/lib/document-manager';
 import { useToast } from "@/hooks/use-toast";
 import * as Tone from 'tone';
-
-type DocumentMeta = Omit<Document, 'content'>;
 
 const AUTOSAVE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
 export default function RetroTypePage() {
-  const [activeDocId, setActiveDocId] = useState<string | null>(null);
-  const [content, setContent] = useState<string>('');
+  const [activeDocument, setActiveDocument] = useState<Document | null>(null);
+  const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
+  const [content, setContent] = useState(''); // content of the active chapter
+  
   const [documents, setDocuments] = useState<DocumentMeta[]>([]);
   const [isSoundOn, setIsSoundOn] = useState<boolean>(true);
+  const [isLined, setIsLined] = useState<boolean>(true);
+  const [showChapters, setShowChapters] = useState<boolean>(true);
+
   const [isDialogOpen, setIsDialogOpen] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
@@ -41,36 +46,55 @@ export default function RetroTypePage() {
     return docs;
   }, []);
 
+  const updateActiveChapterContent = (newContent: string) => {
+    setContent(newContent);
+    if (!activeDocument || !activeChapterId) return;
+
+    setActiveDocument(prevDoc => {
+      if (!prevDoc) return null;
+      return {
+        ...prevDoc,
+        chapters: prevDoc.chapters.map(chap => 
+          chap.id === activeChapterId ? { ...chap, content: newContent } : chap
+        ),
+      };
+    });
+  };
+
   useEffect(() => {
     if (isInitialLoad.current) {
       isInitialLoad.current = false;
       const initialDocs = loadDocuments();
       if (initialDocs.length > 0) {
-        const mostRecentDoc = initialDocs[0];
-        const fullDoc = docManager.getDocument(mostRecentDoc.id);
+        const mostRecentDocId = initialDocs[0].id;
+        const fullDoc = docManager.getDocument(mostRecentDocId);
         if (fullDoc) {
-            setActiveDocId(fullDoc.id);
-            setContent(fullDoc.content);
+          setActiveDocument(fullDoc);
+          const firstChapterId = fullDoc.chapters[0]?.id || null;
+          setActiveChapterId(firstChapterId);
+          setContent(fullDoc.chapters[0]?.content || '');
         }
       } else {
-        const newId = docManager.createNewDocument();
-        setActiveDocId(newId);
-        setContent('');
+        const newDoc = docManager.createNewDocument();
+        setActiveDocument(newDoc);
+        const firstChapterId = newDoc.chapters[0]?.id || null;
+        setActiveChapterId(firstChapterId);
+        setContent(newDoc.chapters[0]?.content || '');
         loadDocuments();
       }
     }
   }, [loadDocuments]);
 
   const handleSave = useCallback(() => {
-    if (activeDocId) {
-      docManager.saveDocument(activeDocId, content);
-      setDocuments(docManager.getDocuments());
+    if (activeDocument) {
+      docManager.saveDocument(activeDocument);
+      loadDocuments();
     }
-  }, [activeDocId, content]);
+  }, [activeDocument, loadDocuments]);
 
   useEffect(() => {
     const autoSave = () => {
-      if (activeDocId && !isInitialLoad.current) {
+      if (activeDocument && !isInitialLoad.current) {
         setIsSaving(true);
         handleSave();
         toast({ title: "Auto-saved!", description: "Your document has been saved." });
@@ -79,54 +103,59 @@ export default function RetroTypePage() {
     };
     const intervalId = setInterval(autoSave, AUTOSAVE_INTERVAL);
     return () => clearInterval(intervalId);
-  }, [activeDocId, handleSave, toast]);
+  }, [activeDocument, handleSave, toast]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (activeDocId) {
+      if (activeDocument) {
         handleSave();
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [activeDocId, handleSave]);
+  }, [activeDocument, handleSave]);
 
-  const handleSaveAndSwitch = useCallback((newDocId: string, newContent: string) => {
+  const switchDocument = (doc: Document) => {
     handleSave();
-    setActiveDocId(newDocId);
-    setContent(newContent);
+    setActiveDocument(doc);
+    const firstChapterId = doc.chapters[0]?.id || null;
+    setActiveChapterId(firstChapterId);
+    setContent(doc.chapters[0]?.content || '');
     loadDocuments();
-  }, [handleSave, loadDocuments]);
+  }
 
   const handleNewDocument = () => {
-    const newId = docManager.createNewDocument();
-    handleSaveAndSwitch(newId, '');
+    const newDoc = docManager.createNewDocument();
+    switchDocument(newDoc);
     toast({ title: "New Document", description: "Started a fresh page." });
   };
 
   const handleOpenDocument = (id: string) => {
     const doc = docManager.getDocument(id);
     if (doc) {
-      handleSaveAndSwitch(doc.id, doc.content);
+      switchDocument(doc);
     }
     setIsDialogOpen(false);
   };
 
   const handleDeleteDocument = (id: string) => {
-    const currentActiveId = activeDocId;
     docManager.deleteDocument(id);
     const updatedDocs = loadDocuments();
     toast({ title: "Document Deleted", variant: "destructive" });
     
-    if (currentActiveId === id) {
+    if (activeDocument?.id === id) {
       if (updatedDocs.length > 0) {
         const docToOpen = docManager.getDocument(updatedDocs[0].id);
-        setActiveDocId(docToOpen?.id || null);
-        setContent(docToOpen?.content || '');
+        if (docToOpen) {
+          setActiveDocument(docToOpen);
+          setActiveChapterId(docToOpen.chapters[0]?.id || null);
+          setContent(docToOpen.chapters[0]?.content || '');
+        }
       } else {
-        const newId = docManager.createNewDocument();
-        setActiveDocId(newId);
-        setContent('');
+        const newDoc = docManager.createNewDocument();
+        setActiveDocument(newDoc);
+        setActiveChapterId(newDoc.chapters[0]?.id || null);
+        setContent(newDoc.chapters[0]?.content || '');
         loadDocuments();
       }
     }
@@ -142,11 +171,57 @@ export default function RetroTypePage() {
   }, [isSoundOn]);
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setContent(e.target.value);
+    updateActiveChapterContent(e.target.value);
     playKeystrokeSound();
   };
-  
-  const activeDoc = documents.find(d => d.id === activeDocId);
+
+  const handleSelectChapter = (chapterId: string) => {
+    setActiveChapterId(chapterId);
+    setContent(activeDocument?.chapters.find(c => c.id === chapterId)?.content || '');
+  }
+
+  const handleNewChapter = () => {
+    if (!activeDocument) return;
+    const newChapter: Chapter = {
+      id: Date.now().toString(),
+      title: `Chapter ${activeDocument.chapters.length + 1}`,
+      content: '',
+    };
+    const updatedDoc = {
+      ...activeDocument,
+      chapters: [...activeDocument.chapters, newChapter]
+    };
+    setActiveDocument(updatedDoc);
+    setActiveChapterId(newChapter.id);
+    setContent('');
+  }
+
+  const handleDeleteChapter = (chapterId: string) => {
+    if (!activeDocument || activeDocument.chapters.length <= 1) {
+      toast({ title: "Cannot delete the last chapter", variant: "destructive" });
+      return;
+    };
+    
+    const updatedChapters = activeDocument.chapters.filter(c => c.id !== chapterId);
+    const updatedDoc = { ...activeDocument, chapters: updatedChapters };
+    setActiveDocument(updatedDoc);
+
+    if (activeChapterId === chapterId) {
+      const newActiveChapter = updatedChapters[0];
+      setActiveChapterId(newActiveChapter.id);
+      setContent(newActiveChapter.content);
+    }
+  }
+
+  const handleRenameChapter = (chapterId: string, newTitle: string) => {
+    if (!activeDocument) return;
+    const updatedChapters = activeDocument.chapters.map(c => 
+      c.id === chapterId ? { ...c, title: newTitle } : c
+    );
+    setActiveDocument({ ...activeDocument, chapters: updatedChapters });
+  }
+
+  const activeDocMeta = documents.find(d => d.id === activeDocument?.id);
 
   return (
     <div className="flex flex-col h-svh bg-background text-foreground font-body">
@@ -155,23 +230,43 @@ export default function RetroTypePage() {
         onSoundToggle={setIsSoundOn}
         onNewDocument={handleNewDocument}
         onOpen={() => setIsDialogOpen(true)}
+        isLined={isLined}
+        onToggleLined={() => setIsLined(p => !p)}
+        showChapters={showChapters}
+        onToggleChapters={() => setShowChapters(p => !p)}
       />
 
-      <main className="flex-grow flex justify-center p-4 sm:p-8 overflow-y-auto">
-        <div className="w-full max-w-4xl h-full">
-            <Textarea
-              value={content}
-              onChange={handleTextChange}
-              placeholder="Your story begins here..."
-              className="w-full h-full resize-none p-8 sm:p-12 text-lg leading-loose bg-card border-none shadow-lg focus-visible:ring-0 focus-visible:ring-offset-0 typewriter-textarea"
-              aria-label="Text editor"
-            />
-        </div>
-      </main>
+      <div className="flex flex-grow overflow-hidden">
+        {showChapters && activeDocument && (
+          <ChapterSidebar 
+            chapters={activeDocument.chapters}
+            activeChapterId={activeChapterId}
+            onSelectChapter={handleSelectChapter}
+            onNewChapter={handleNewChapter}
+            onDeleteChapter={handleDeleteChapter}
+            onRenameChapter={handleRenameChapter}
+          />
+        )}
+        <main className="flex-grow flex justify-center p-4 sm:p-8 overflow-y-auto">
+          <div className={cn("w-full max-w-4xl h-full relative", { "lined-paper-wrapper lined": isLined })}>
+              <Textarea
+                key={activeChapterId} // Re-mounts the textarea on chapter change
+                value={content}
+                onChange={handleTextChange}
+                placeholder="Your story begins here..."
+                className={cn(
+                  "w-full h-full resize-none p-8 sm:p-12 text-lg bg-card border-none shadow-lg focus-visible:ring-0 focus-visible:ring-offset-0 typewriter-textarea",
+                  { "lined-paper": isLined, "leading-loose": !isLined }
+                )}
+                aria-label="Text editor"
+              />
+          </div>
+        </main>
+      </div>
       
       <AppFooter
         isSaving={isSaving}
-        lastSaved={activeDoc ? activeDoc.updatedAt : null}
+        lastSaved={activeDocMeta ? activeDocMeta.updatedAt : null}
       />
 
       <OpenDocumentDialog
