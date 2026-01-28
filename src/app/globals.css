@@ -61,7 +61,6 @@
   .typewriter-textarea {
     caret-color: hsl(var(--foreground));
     caret-shape: block;
-    animation: blink 1.2s step-end infinite;
   }
   .lined-paper-wrapper.lined::before {
     content: "";
@@ -81,14 +80,5 @@
     padding-left: 3.5rem !important;
     position: relative;
     z-index: 0;
-  }
-}
-
-@keyframes blink {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0;
   }
 }
