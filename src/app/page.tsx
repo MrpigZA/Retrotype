@@ -15,6 +15,7 @@ import * as Tone from 'tone';
 const AUTOSAVE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
 export default function RetroTypePage() {
+  const [isLoading, setIsLoading] = useState(true);
   const [activeDocument, setActiveDocument] = useState<Document | null>(null);
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
   const [content, setContent] = useState(''); // content of the active chapter
@@ -29,7 +30,6 @@ export default function RetroTypePage() {
   const { toast } = useToast();
 
   const synthRef = useRef<Tone.MembraneSynth | null>(null);
-  const isInitialLoad = useRef(true);
 
   useEffect(() => {
     synthRef.current = new Tone.MembraneSynth({
@@ -62,29 +62,27 @@ export default function RetroTypePage() {
   };
 
   useEffect(() => {
-    if (isInitialLoad.current) {
-      isInitialLoad.current = false;
-      const initialDocs = loadDocuments();
-      let docToLoad: Document | null = null;
-      if (initialDocs.length > 0) {
-        const mostRecentDocId = initialDocs[0].id;
-        docToLoad = docManager.getDocument(mostRecentDocId);
-      } 
-      
-      if (docToLoad) {
-        setActiveDocument(docToLoad);
-        const firstChapterId = docToLoad.chapters[0]?.id || null;
-        setActiveChapterId(firstChapterId);
-        setContent(docToLoad.chapters[0]?.content || '');
-      } else {
-        const newDoc = docManager.createNewDocument();
-        setActiveDocument(newDoc);
-        const firstChapterId = newDoc.chapters[0]?.id || null;
-        setActiveChapterId(firstChapterId);
-        setContent(newDoc.chapters[0]?.content || '');
-        loadDocuments();
-      }
+    const initialDocs = loadDocuments();
+    let docToLoad: Document | null = null;
+    if (initialDocs.length > 0) {
+      const mostRecentDocId = initialDocs[0].id;
+      docToLoad = docManager.getDocument(mostRecentDocId);
+    } 
+    
+    if (docToLoad) {
+      setActiveDocument(docToLoad);
+      const firstChapterId = docToLoad.chapters[0]?.id || null;
+      setActiveChapterId(firstChapterId);
+      setContent(docToLoad.chapters[0]?.content || '');
+    } else {
+      const newDoc = docManager.createNewDocument();
+      setActiveDocument(newDoc);
+      const firstChapterId = newDoc.chapters[0]?.id || null;
+      setActiveChapterId(firstChapterId);
+      setContent(newDoc.chapters[0]?.content || '');
+      loadDocuments();
     }
+    setIsLoading(false);
   }, [loadDocuments]);
 
   const handleSave = useCallback(() => {
@@ -95,8 +93,9 @@ export default function RetroTypePage() {
   }, [activeDocument, loadDocuments]);
 
   useEffect(() => {
+    if (isLoading) return;
     const autoSave = () => {
-      if (activeDocument && !isInitialLoad.current) {
+      if (activeDocument) {
         setIsSaving(true);
         handleSave();
         toast({ title: "Auto-saved!", description: "Your document has been saved." });
@@ -105,9 +104,10 @@ export default function RetroTypePage() {
     };
     const intervalId = setInterval(autoSave, AUTOSAVE_INTERVAL);
     return () => clearInterval(intervalId);
-  }, [activeDocument, handleSave, toast]);
+  }, [activeDocument, handleSave, toast, isLoading]);
 
   useEffect(() => {
+    if (isLoading) return;
     const handleBeforeUnload = () => {
       if (activeDocument) {
         handleSave();
@@ -115,7 +115,7 @@ export default function RetroTypePage() {
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [activeDocument, handleSave]);
+  }, [activeDocument, handleSave, isLoading]);
 
   const switchDocument = (doc: Document) => {
     handleSave();
@@ -224,6 +224,10 @@ export default function RetroTypePage() {
   }
 
   const activeDocMeta = documents.find(d => d.id === activeDocument?.id);
+
+  if (isLoading) {
+    return null;
+  }
 
   return (
     <div className="flex flex-col h-svh bg-background text-foreground font-body">
