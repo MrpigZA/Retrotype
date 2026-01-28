@@ -60,7 +60,6 @@
 @layer utilities {
   .typewriter-textarea {
     caret-color: hsl(var(--foreground));
-    caret-shape: block;
   }
   .lined-paper-wrapper.lined::before {
     content: "";
