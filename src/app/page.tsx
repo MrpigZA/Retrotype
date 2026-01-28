@@ -15,7 +15,6 @@ import * as Tone from 'tone';
 const AUTOSAVE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
 export default function RetroTypePage() {
-  const [hasMounted, setHasMounted] = useState(false);
   const [activeDocument, setActiveDocument] = useState<Document | null>(null);
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
   const [content, setContent] = useState(''); // content of the active chapter
@@ -31,10 +30,6 @@ export default function RetroTypePage() {
 
   const synthRef = useRef<Tone.MembraneSynth | null>(null);
   const isInitialLoad = useRef(true);
-
-  useEffect(() => {
-    setHasMounted(true);
-  }, []);
 
   useEffect(() => {
     synthRef.current = new Tone.MembraneSynth({
@@ -67,18 +62,20 @@ export default function RetroTypePage() {
   };
 
   useEffect(() => {
-    if (hasMounted && isInitialLoad.current) {
+    if (isInitialLoad.current) {
       isInitialLoad.current = false;
       const initialDocs = loadDocuments();
+      let docToLoad: Document | null = null;
       if (initialDocs.length > 0) {
         const mostRecentDocId = initialDocs[0].id;
-        const fullDoc = docManager.getDocument(mostRecentDocId);
-        if (fullDoc) {
-          setActiveDocument(fullDoc);
-          const firstChapterId = fullDoc.chapters[0]?.id || null;
-          setActiveChapterId(firstChapterId);
-          setContent(fullDoc.chapters[0]?.content || '');
-        }
+        docToLoad = docManager.getDocument(mostRecentDocId);
+      } 
+      
+      if (docToLoad) {
+        setActiveDocument(docToLoad);
+        const firstChapterId = docToLoad.chapters[0]?.id || null;
+        setActiveChapterId(firstChapterId);
+        setContent(docToLoad.chapters[0]?.content || '');
       } else {
         const newDoc = docManager.createNewDocument();
         setActiveDocument(newDoc);
@@ -88,7 +85,7 @@ export default function RetroTypePage() {
         loadDocuments();
       }
     }
-  }, [hasMounted, loadDocuments]);
+  }, [loadDocuments]);
 
   const handleSave = useCallback(() => {
     if (activeDocument) {
@@ -224,10 +221,6 @@ export default function RetroTypePage() {
       c.id === chapterId ? { ...c, title: newTitle } : c
     );
     setActiveDocument({ ...activeDocument, chapters: updatedChapters });
-  }
-
-  if (!hasMounted) {
-    return null;
   }
 
   const activeDocMeta = documents.find(d => d.id === activeDocument?.id);
