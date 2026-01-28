@@ -16,7 +16,7 @@ const AUTOSAVE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 type ToneType = typeof import('tone');
 
 export default function RetroTypePage() {
-  const [isLoading, setIsLoading] = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
   const [activeDocument, setActiveDocument] = useState<Document | null>(null);
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
   const [content, setContent] = useState(''); // content of the active chapter
@@ -33,6 +33,10 @@ export default function RetroTypePage() {
   const ToneRef = useRef<ToneType | null>(null);
   const synthRef = useRef<import('tone').MembraneSynth | null>(null);
 
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const loadDocuments = useCallback(() => {
     const docs = docManager.getDocuments();
     setDocuments(docs);
@@ -40,8 +44,9 @@ export default function RetroTypePage() {
   }, []);
   
   useEffect(() => {
-    const initApp = async () => {
-      // Dynamically import tone and initialize synth
+    if (!isMounted) return;
+
+    const initSound = async () => {
       const ToneModule = await import('tone');
       ToneRef.current = ToneModule;
       synthRef.current = new ToneModule.MembraneSynth({
@@ -50,36 +55,32 @@ export default function RetroTypePage() {
         oscillator: { type: 'sine' },
         envelope: { attack: 0.001, decay: 0.2, sustain: 0.01, release: 0.05, attackCurve: 'exponential' }
       }).toDestination();
+    };
+    initSound();
 
-      // Load documents from localStorage
-      const initialDocs = docManager.getDocuments();
-      setDocuments(initialDocs);
+    const initialDocs = docManager.getDocuments();
+    setDocuments(initialDocs);
 
-      let docToLoad: Document | null = null;
-      if (initialDocs.length > 0) {
-        const mostRecentDocId = initialDocs[0].id;
-        docToLoad = docManager.getDocument(mostRecentDocId);
-      } 
-      
-      if (docToLoad) {
-        setActiveDocument(docToLoad);
-        const firstChapterId = docToLoad.chapters[0]?.id || null;
-        setActiveChapterId(firstChapterId);
-        setContent(docToLoad.chapters[0]?.content || '');
-      } else {
-        const newDoc = docManager.createNewDocument();
-        setActiveDocument(newDoc);
-        const firstChapterId = newDoc.chapters[0]?.id || null;
-        setActiveChapterId(firstChapterId);
-        setContent(newDoc.chapters[0]?.content || '');
-        setDocuments(docManager.getDocuments());
-      }
-      
-      setIsLoading(false);
-    }
+    let docToLoad: Document | null = null;
+    if (initialDocs.length > 0) {
+      const mostRecentDocId = initialDocs[0].id;
+      docToLoad = docManager.getDocument(mostRecentDocId);
+    } 
     
-    initApp();
-  }, []); // Empty dependency array ensures this runs only once on mount
+    if (docToLoad) {
+      setActiveDocument(docToLoad);
+      const firstChapterId = docToLoad.chapters[0]?.id || null;
+      setActiveChapterId(firstChapterId);
+      setContent(docToLoad.chapters[0]?.content || '');
+    } else {
+      const newDoc = docManager.createNewDocument();
+      setActiveDocument(newDoc);
+      const firstChapterId = newDoc.chapters[0]?.id || null;
+      setActiveChapterId(firstChapterId);
+      setContent(newDoc.chapters[0]?.content || '');
+      setDocuments(docManager.getDocuments());
+    }
+  }, [isMounted]);
 
   const handleSave = useCallback(() => {
     if (activeDocument) {
@@ -89,29 +90,27 @@ export default function RetroTypePage() {
   }, [activeDocument, loadDocuments]);
 
   useEffect(() => {
-    if (isLoading) return; // Don't run autosave while loading
+    if (!isMounted || !activeDocument) return; 
+    
     const autoSave = () => {
-      if (activeDocument) {
-        setIsSaving(true);
-        handleSave();
-        toast({ title: "Auto-saved!", description: "Your document has been saved." });
-        setTimeout(() => setIsSaving(false), 1000);
-      }
+      setIsSaving(true);
+      handleSave();
+      toast({ title: "Auto-saved!", description: "Your document has been saved." });
+      setTimeout(() => setIsSaving(false), 1000);
     };
     const intervalId = setInterval(autoSave, AUTOSAVE_INTERVAL);
     return () => clearInterval(intervalId);
-  }, [isLoading, activeDocument, handleSave, toast]);
+  }, [isMounted, activeDocument, handleSave, toast]);
 
   useEffect(() => {
-    if (isLoading) return;
+    if (!isMounted || !activeDocument) return;
+
     const handleBeforeUnload = () => {
-      if (activeDocument) {
-        handleSave();
-      }
+      handleSave();
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isLoading, activeDocument, handleSave]);
+  }, [isMounted, activeDocument, handleSave]);
 
   const switchDocument = (doc: Document) => {
     handleSave();
@@ -235,7 +234,7 @@ export default function RetroTypePage() {
     setActiveDocument({ ...activeDocument, chapters: updatedChapters });
   }
 
-  if (isLoading) {
+  if (!isMounted) {
     return null;
   }
   
