@@ -15,6 +15,7 @@ import * as Tone from 'tone';
 const AUTOSAVE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
 export default function RetroTypePage() {
+  const [hasMounted, setHasMounted] = useState(false);
   const [activeDocument, setActiveDocument] = useState<Document | null>(null);
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
   const [content, setContent] = useState(''); // content of the active chapter
@@ -30,6 +31,10 @@ export default function RetroTypePage() {
 
   const synthRef = useRef<Tone.MembraneSynth | null>(null);
   const isInitialLoad = useRef(true);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   useEffect(() => {
     synthRef.current = new Tone.MembraneSynth({
@@ -62,7 +67,7 @@ export default function RetroTypePage() {
   };
 
   useEffect(() => {
-    if (isInitialLoad.current) {
+    if (hasMounted && isInitialLoad.current) {
       isInitialLoad.current = false;
       const initialDocs = loadDocuments();
       if (initialDocs.length > 0) {
@@ -83,7 +88,7 @@ export default function RetroTypePage() {
         loadDocuments();
       }
     }
-  }, [loadDocuments]);
+  }, [hasMounted, loadDocuments]);
 
   const handleSave = useCallback(() => {
     if (activeDocument) {
@@ -219,6 +224,10 @@ export default function RetroTypePage() {
       c.id === chapterId ? { ...c, title: newTitle } : c
     );
     setActiveDocument({ ...activeDocument, chapters: updatedChapters });
+  }
+
+  if (!hasMounted) {
+    return null;
   }
 
   const activeDocMeta = documents.find(d => d.id === activeDocument?.id);
