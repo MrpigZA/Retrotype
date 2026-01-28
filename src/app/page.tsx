@@ -10,9 +10,10 @@ import { ChapterSidebar } from '@/components/chapter-sidebar';
 import * as docManager from '@/lib/document-manager';
 import type { Document, DocumentMeta, Chapter } from '@/lib/document-manager';
 import { useToast } from "@/hooks/use-toast";
-import * as Tone from 'tone';
 
 const AUTOSAVE_INTERVAL = 5 * 60 * 1000; // 5 minutes
+
+type ToneType = typeof import('tone');
 
 export default function RetroTypePage() {
   const [isLoading, setIsLoading] = useState(true);
@@ -29,15 +30,19 @@ export default function RetroTypePage() {
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
 
-  const synthRef = useRef<Tone.MembraneSynth | null>(null);
+  const ToneRef = useRef<ToneType | null>(null);
+  const synthRef = useRef<import('tone').MembraneSynth | null>(null);
 
   useEffect(() => {
-    synthRef.current = new Tone.MembraneSynth({
-      pitchDecay: 0.01,
-      octaves: 2,
-      oscillator: { type: 'sine' },
-      envelope: { attack: 0.001, decay: 0.2, sustain: 0.01, release: 0.05, attackCurve: 'exponential' }
-    }).toDestination();
+    import('tone').then(ToneModule => {
+      ToneRef.current = ToneModule;
+      synthRef.current = new ToneModule.MembraneSynth({
+        pitchDecay: 0.01,
+        octaves: 2,
+        oscillator: { type: 'sine' },
+        envelope: { attack: 0.001, decay: 0.2, sustain: 0.01, release: 0.05, attackCurve: 'exponential' }
+      }).toDestination();
+    });
   }, []);
 
   const loadDocuments = useCallback(() => {
@@ -164,7 +169,8 @@ export default function RetroTypePage() {
   };
 
   const playKeystrokeSound = useCallback(() => {
-    if (isSoundOn && synthRef.current) {
+    const Tone = ToneRef.current;
+    if (isSoundOn && synthRef.current && Tone) {
       if (Tone.context.state !== 'running') {
         Tone.context.resume();
       }
