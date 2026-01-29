@@ -5,12 +5,12 @@
   "homepage": "./",
   "main": "electron/main.js",
   "scripts": {
-    "dev": "next dev --turbopack -p 9002",
+    "dev": "node_modules/.bin/next dev --turbopack -p 9002",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
+    "build": "node_modules/.bin/next build",
+    "start": "node_modules/.bin/next start",
+    "lint": "node_modules/.bin/next lint",
     "typecheck": "tsc --noEmit",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:9002 && electron .\"",
     "electron:build": "npm run build && electron-builder"
