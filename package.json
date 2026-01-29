@@ -12,8 +12,8 @@
     "start": "node node_modules/next/dist/bin/next start",
     "lint": "node node_modules/next/dist/bin/next lint",
     "typecheck": "tsc --noEmit",
-    "electron:dev": "node node_modules/concurrently/bin/concurrently.js \"npm run dev\" \"node node_modules/wait-on/bin/wait-on http://localhost:9002 && node node_modules/electron/cli.js .\"",
-    "electron:build": "npm run build && node node_modules/electron-builder/out/cli/cli.js"
+    "electron:dev": "npx concurrently \"npm run dev\" \"npx wait-on http://localhost:9002 && npx electron .\"",
+    "electron:build": "npm run build && npx electron-builder"
   },
   "dependencies": {
     "@genkit-ai/google-genai": "^1.20.0",
